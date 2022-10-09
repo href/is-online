@@ -1,0 +1,17 @@
+[package]
+name = "is-online"
+description = "A CLI to check if a port one one or many hosts is online"
+version = "0.1.0"
+authors = ["Denis Krienbühl <denis@href.ch>"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/href/is-online"
+readme = "README.md"
+keywords = ["cli", "online", "check", "port", "socket"]
+categories = ["command-line-utilities", "network-programming"]
+
+[dependencies]
+clap = { version = "3.0.5", features = ["cargo", "derive", "wrap_help"] }
+ipnet = "2.5.0"
+num_cpus = "1.13.1"
+rayon = "1.5.1"
