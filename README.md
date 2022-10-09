@@ -2,6 +2,12 @@
 
 A CLI to check if a port one one or many hosts is online.
 
+## Install
+
+```bash
+cargo install is-online
+```
+
 ## Examples
 
 Check if port 443 via IPv4 and IPv6 is reachable within 1 second:
