@@ -10,6 +10,7 @@ use std::cmp::min;
 use std::collections::HashSet;
 use std::env;
 use std::process;
+use std::thread::available_parallelism;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{io, io::prelude::*};
@@ -67,19 +68,27 @@ struct Args {
     workers: u8,
 }
 
+impl Args {
+    /// The number of threads that should be used
+    fn threads(&self) -> usize {
+        let parallelism: usize = match available_parallelism() {
+            Ok(value) => value.get(),
+            _ => 1,
+        };
+
+        match self.workers {
+            0 => min(parallelism * 4, 255) as usize,
+            _ => min(self.workers, 255) as usize,
+        }
+    }
+}
+
 fn main() {
     let args = Args::parse();
     let timeout = Duration::new(0, args.timeout * 1_000_000);
 
-    // Set the number of threads used
-    let threads = if args.workers == 0 {
-        min(num_cpus::get() * 4, 255) as usize
-    } else {
-        min(args.workers, 255) as usize
-    };
-
     rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
+        .num_threads(args.threads())
         .build_global()
         .unwrap();
 
