@@ -81,41 +81,55 @@ impl Args {
             _ => min(self.workers, 255) as usize,
         }
     }
+
+    /// The protocol to use
+    fn protocol(&self) -> IpProtocol {
+        match (self.ipv4_only, self.ipv6_only) {
+            (true, false) => IpProtocol::V4,
+            (false, true) => IpProtocol::V6,
+            _ => IpProtocol::Both,
+        }
+    }
+
+    /// The check strategy
+    fn strategy(&self) -> CheckStrategy {
+        if self.all {
+            CheckStrategy::All
+        } else {
+            CheckStrategy::Any
+        }
+    }
+
+    /// The timeout as duration
+    fn timeout_duration(&self) -> Duration {
+        Duration::from_millis(self.timeout as u64)
+    }
+
+    /// The port check to execute
+    fn tcp_port_check(&self) -> TcpPortCheck {
+        TcpPortCheck::default()
+            .with_port(self.port)
+            .with_protocol(self.protocol())
+            .with_timeout(self.timeout_duration())
+            .with_strategy(self.strategy())
+    }
 }
 
 fn main() {
     let args = Args::parse();
-    let timeout = Duration::new(0, args.timeout * 1_000_000);
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(args.threads())
         .build_global()
         .unwrap();
 
-    // Pick the protocol to use
-    let protocol = match (args.ipv4_only, args.ipv6_only) {
-        (true, false) => IpProtocol::V4,
-        (false, true) => IpProtocol::V6,
-        _ => IpProtocol::Both,
-    };
+    let check = args.tcp_port_check();
 
     // Read the hosts from the list, or from stdin
     let hosts = match args.hosts.is_empty() {
         true => io::stdin().lock().lines().map(|l| l.unwrap()).collect(),
         false => args.hosts,
     };
-
-    let strategy = if args.all {
-        CheckStrategy::All
-    } else {
-        CheckStrategy::Any
-    };
-
-    let check = TcpPortCheck::default()
-        .with_port(args.port)
-        .with_protocol(protocol)
-        .with_timeout(timeout)
-        .with_strategy(strategy);
 
     let hosts = expand_subnets(&hosts);
 
