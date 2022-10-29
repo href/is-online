@@ -1,11 +1,9 @@
-mod host;
-
-use crate::host::TcpPortCheck;
 use clap::Parser;
-use host::expand_subnets;
-use host::resolve_hosts;
-use host::CheckStrategy;
-use host::IpProtocol;
+use is_online::expand_subnets;
+use is_online::resolve_hosts;
+use is_online::CheckStrategy;
+use is_online::IpProtocol;
+use is_online::TcpPortCheck;
 use std::cmp::min;
 use std::collections::HashSet;
 use std::env;
