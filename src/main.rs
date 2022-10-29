@@ -6,7 +6,6 @@ use is_online::IpProtocol;
 use is_online::TcpPortCheck;
 use std::cmp::min;
 use std::collections::HashSet;
-use std::env;
 use std::process;
 use std::thread::available_parallelism;
 use std::thread::sleep;
@@ -16,7 +15,7 @@ use std::{io, io::prelude::*};
 #[derive(Parser)]
 #[clap(version, about)]
 /// Check if a port on one or many hosts is online.
-struct Args {
+struct Cli {
     /// Hosts to check (may also be passed through stdin instead)
     #[clap()]
     hosts: Vec<String>,
@@ -46,7 +45,7 @@ struct Args {
     quiet: bool,
 
     /// Do not print colors
-    #[clap(long = "no-color")]
+    #[clap(long = "no-color", env = "NO_COLOR")]
     no_color: bool,
 
     /// Ensure that all addresses the host resolves to are online (by default, only one has to be)
@@ -66,7 +65,7 @@ struct Args {
     workers: u8,
 }
 
-impl Args {
+impl Cli {
     /// The number of threads that should be used
     fn threads(&self) -> usize {
         let parallelism: usize = match available_parallelism() {
@@ -111,67 +110,97 @@ impl Args {
             .with_timeout(self.timeout_duration())
             .with_strategy(self.strategy())
     }
+
+    /// Clear the screen
+    fn clear_screen() {
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+    }
+
+    /// Formats the given text, in color if enabled
+    fn format_output(&self, text: &str, style: FormatStyle) -> String {
+        match (self.no_color, style) {
+            (false, FormatStyle::Success) => format!("\x1b[1;31m{}\x1b[0m", text),
+            (false, FormatStyle::Failure) => format!("\x1b[1;32m{}\x1b[0m", text),
+            _ => text.to_string(),
+        }
+    }
+
+    /// Formats the given text as success
+    fn format_success(&self, text: &str) -> String {
+        self.format_output(text, FormatStyle::Success)
+    }
+
+    /// Formats the given text as failure
+    fn format_failure(&self, text: &str) -> String {
+        self.format_output(text, FormatStyle::Failure)
+    }
+}
+
+enum FormatStyle {
+    Success,
+    Failure,
 }
 
 fn main() {
-    let args = Args::parse();
+    let cli = Cli::parse();
 
+    // Globally configure the number of threads used
     rayon::ThreadPoolBuilder::new()
-        .num_threads(args.threads())
+        .num_threads(cli.threads())
         .build_global()
         .unwrap();
 
-    let check = args.tcp_port_check();
+    // Build the port check
+    let check = cli.tcp_port_check();
 
     // Read the hosts from the list, or from stdin
-    let hosts = match args.hosts.is_empty() {
-        true => io::stdin().lock().lines().map(|l| l.unwrap()).collect(),
-        false => args.hosts,
+    let hosts = match cli.hosts.is_empty() {
+        true => expand_subnets(
+            &io::stdin()
+                .lock()
+                .lines()
+                .map(|l| l.unwrap())
+                .collect::<Vec<String>>(),
+        ),
+        false => expand_subnets(&cli.hosts),
     };
 
-    let hosts = expand_subnets(&hosts);
-
     loop {
-        if args.clear {
-            print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+        // Clear at the beginning of each loop
+        if cli.clear {
+            Cli::clear_screen();
         }
 
+        // Gather the resolved/online hosts
         let resolved = resolve_hosts(&hosts);
         let online = check.collect_online(&resolved);
+
+        // Keep a set of resolved/online hosts
         let resolved: HashSet<String> = resolved.iter().map(|h| h.name.to_string()).collect();
         let online: HashSet<String> = online.iter().map(|h| h.name.to_string()).collect();
 
-        let exit_code = if args.fail && online.len() != hosts.len() {
+        // Exit with a 1 --fail is given and not all hosts are online
+        let exit_code = if cli.fail && online.len() != hosts.len() {
             1
         } else {
             0
         };
 
-        let show_color = !(args.no_color || env::var("NO_COLOR").is_ok());
-        let offline_text = if show_color {
-            "\x1b[1;31moffline\x1b[0m"
-        } else {
-            "offline"
-        };
-        let online_text = if show_color {
-            "\x1b[1;32monline\x1b[0m"
-        } else {
-            "online"
-        };
-
-        if !args.quiet {
+        // Note what went wrong
+        if !cli.quiet {
             for name in hosts.iter().by_ref() {
                 if !resolved.contains(name) {
                     println!("{name} could not be resolved");
                 } else if !online.contains(name) {
-                    println!("{name}:{} is {offline_text}", args.port);
+                    println!("{name}:{} is {}", cli.port, cli.format_failure("offline"));
                 } else {
-                    println!("{name}:{} is {online_text}", args.port);
+                    println!("{name}:{} is {}", cli.port, cli.format_success("online"));
                 }
             }
         }
 
-        let try_again = args.wait && hosts.iter().by_ref().any(|h| !online.contains(h));
+        // Maybe repeat
+        let try_again = cli.wait && hosts.iter().by_ref().any(|h| !online.contains(h));
         if !try_again {
             process::exit(exit_code);
         } else {

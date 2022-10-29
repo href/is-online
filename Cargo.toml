@@ -11,6 +11,6 @@ keywords = ["cli", "online", "check", "port", "socket"]
 categories = ["command-line-utilities", "network-programming"]
 
 [dependencies]
-clap = { version = "3.0.5", features = ["cargo", "derive", "wrap_help"] }
+clap = { version = "3.0.5", features = ["cargo", "derive", "wrap_help", "env"] }
 ipnet = "2.5.0"
 rayon = "1.5.1"
