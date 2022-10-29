@@ -17,9 +17,6 @@ pub struct HostParseError;
 #[derive(Debug)]
 struct ResolveHostError;
 
-#[derive(Debug)]
-struct NoSuchAddressError;
-
 /// A host that carries a name, and a list of addresses associated with that
 /// name. The name can be a valid host name, FQDN, or IP address.
 #[derive(Debug, Clone)]
