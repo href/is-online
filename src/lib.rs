@@ -3,6 +3,7 @@ use ipnet::Ipv6Net;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 use std::fmt;
+use std::io;
 use std::net::IpAddr;
 use std::net::Shutdown;
 use std::net::SocketAddr;
@@ -16,6 +17,40 @@ pub struct HostParseError;
 
 #[derive(Debug)]
 struct ResolveHostError;
+
+/// Connects to a port and returns [true] if that was successful, [false] if not. The connection
+/// is subsequently closed. Wraps an [io::Error], but does not propagate timeout errors, as
+/// ports that do not answer within the timeout are considered offline.
+///
+/// ```
+/// use std::net::SocketAddr;
+/// use std::str::FromStr;
+/// use std::time::Duration;
+/// use is_online::is_port_online;
+///
+/// let addr = SocketAddr::from_str("8.8.8.8:53").unwrap();
+/// let timeout = Duration::from_secs(3);
+/// assert!(is_port_online(&addr, timeout).unwrap());
+/// ```
+///
+/// This should only be used to check for open/closed ports. If for any reason you need to
+/// re-use the established connection, use [TcpStream::connect_timeout] directly.
+pub fn is_port_online(addr: &SocketAddr, timeout: Duration) -> Result<bool, std::io::Error> {
+    let stream = TcpStream::connect_timeout(&addr, timeout);
+
+    if let Err(e) = stream {
+        if e.kind() == io::ErrorKind::TimedOut {
+            return Ok(false);
+        }
+
+        return Err(e);
+    }
+
+    let stream = stream.unwrap();
+    stream.shutdown(Shutdown::Both).ok();
+
+    Ok(true)
+}
 
 /// A host that carries a name, and a list of addresses associated with that
 /// name. The name can be a valid host name, FQDN, or IP address.
